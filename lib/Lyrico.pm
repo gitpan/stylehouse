@@ -19,7 +19,7 @@ sub new {
     my $self = bless {}, shift;
     shift->($self);
 
-    $self->view($self->hostinfo->get_view($self, "hodu"));
+    $self->view($self->hostinfo->get_view($self, "lyrics" => "hodi"));
     $self->text($self->view->text([],
         { skip_hostinfo => 1,
         leave_spans => 1, 
@@ -28,7 +28,8 @@ sub new {
             for my $s (@{$text->tuxts}) {
                 my $size = int rand 20;
                 my $width = int rand 60;
-                $s->{style} = random_colour_background()." opacity:0.4; font-size: ${size}em; width: ${width}em";
+                $s->{style} = random_colour_background()." opacity:0.4; font-size: ${size}em; width: ${width}em"
+                    .($size > 10 ? "font-family: Cambria, Georgia, serif;" : "");
                 $s->{class} = "lyrics";
             }
         }, }
@@ -83,7 +84,7 @@ sub event {
                 return;
             }
         }
-            
+
         $self->write($h, \@lyrics);
     }
 }
@@ -111,6 +112,9 @@ sub write {
 sub menu {
     my $self = shift;
     return {
+        '.' => sub {
+            $self->hostinfo->flood($self->{text});
+        },
         onoff => sub {
             if ($self->started) {
                 $self->stopclicky;

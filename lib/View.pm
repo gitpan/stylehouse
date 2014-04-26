@@ -2,23 +2,39 @@ package View;
 use Mojo::Base 'Mojolicious::Controller';
 use Scriptalicious;
 use Texty;
+use Time::HiRes 'usleep';
 
 has 'hostinfo';
 has 'owner';
 has 'divid';
 has 'id';
-has 'others';
+has 'html';
 
 sub new {
     my $self = bless {}, shift;
     shift->($self);
 
-    $self->owner(shift);
-    $self->divid(shift);
-    $self->hostinfo->screenthing($self);
-    $self->others(shift);
+    $self->html("");
 
     $self;
+}
+
+sub onunfocus {
+    my $self = shift;
+    my $sub = shift;
+    $self->{onunfocus} = $sub;
+    return $self;
+}
+
+sub unfocus {
+    my $self = shift;
+    if ($self->{onunfocus}) {
+        $self->{onunfocus}->();
+    }
+    if ($self->{menu}) {
+        # our menu span ids will be like text but -menu so the texty takeover will not rm it
+    }
+    # could hide our spans? the above hook from Codo to code_unfocus does that
 }
 
 # the tab is the repositories
@@ -37,7 +53,21 @@ sub text {
     $self->{text} ||= Texty->new($self->hostinfo->intro, $self, @_);
 }
 
-sub kill {
+sub menu {
+    my $self = shift;
+
+    $self->{menu} ||= Menu->new($self->hostinfo->intro, $self, @_);
+}
+
+sub travel {
+    my $self = shift;
+    
+    $self->{travel} ||= Travel->new($self->hostinfo->intro, $self->id);
+
+    $self->{travel}->travel(@_);
+}
+
+sub nah {
     my $self = shift;
     say "Ref: ".ref $self->owner;
     $self->wipehtml unless ref $self->owner eq "Lyrico";
@@ -50,23 +80,26 @@ sub resume {
 
 sub wipehtml {
     my $self = shift;
+    $self->html("");
     $self->hostinfo->send("\$('.".$self->id."').remove()");
+    1;
+}
+
+sub event {
+    my $self = shift;
+    my $tx = shift;
+    my $event = shift;
+    my $this = shift;
+
+    say "Event in $self heading for ".$self->owner;
+
+    $self->owner->event($tx, $event, $this, $self);
 }
 
 sub takeover {
     my $self = shift;
     my $htmls = shift;
     my $append = shift;
-    
-    # other views .id set hidden
-    #$self->hostinfo->send(
-    #    "\$('#".$self->divid." span').hide();" # others # TODO add in exception for constant stuff
-    #   ." \$('.".$self->id."').show();" # us
-    #   .($append ? "" : "\$('.".$self->id."').remove()")
-    #) unless $self->divid eq "menu";
-
-    $self->wipehtml unless $append;
-    
     my $divid = $self->divid;
     my $html;
     for my $h (@$htmls) {
@@ -75,8 +108,28 @@ sub takeover {
         }
         $html .= $h;
     }
+    
+    # other views .id set hidden
+    #$self->hostinfo->send(
+    #    "\$('#".$self->divid." span').hide();" # others # TODO add in exception for constant stuff
+    #   ." \$('.".$self->id."').show();" # us
+    #   .($append ? "" : "\$('.".$self->id."').remove()")
+    #) unless $self->divid eq "menu";
+
+    $append ?
+        $self->html($self->html."\n".$html)
+      : $self->wipehtml && $self->html($html);
+    
+
+    $self->hostinfo->view_incharge($self);
 
     $self->part_and_append($divid => $html);
+}
+
+sub review {
+    my $self = shift;
+    
+    $self->part_and_append($self->divid => $self->html);
 }
 
 sub part_and_append {
@@ -85,7 +138,7 @@ sub part_and_append {
     my $html = shift;
 
     return say "no html" unless $html;
-    
+
     if (length($html) > 30000) {
         my @htmls = split /(?<=<\/span>)\s*(?=<span)/, $html;
 
@@ -100,15 +153,17 @@ sub part_and_append {
             }
         }
         push @html_batches, [ @$b ] if @$b;
-        say "Think we've batchified htmls: ". anydump(\@html_batches);
+        say anydump($html_batches[0]->[0]);
+        say anydump($html_batches[1]->[0]);
+        say "batchified htmls heading for #$divid from ".$self->owner.": ".(scalar(@html_batches)-1)." x 10 + ".scalar(@{$html_batches[-1]});
 
         for my $html_batch (@html_batches) {
 
-            my $html = join "", @$html_batch;
+            my $batch = join "", @$html_batch;
 
-            $html =~ s/'/\\'/;
-            $self->hostinfo->send("  \$('#$divid').append('$html');");
-
+            $batch =~ s/'/\\'/;
+            $self->hostinfo->send("  \$('#$divid').append('$batch');");
+            usleep 10000;
         }
     }
     else {

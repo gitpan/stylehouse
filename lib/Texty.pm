@@ -27,6 +27,7 @@ sub new {
     $self->view(shift || die "need owner");
     $self->lines(shift || []);
     $self->hooks(shift || {});
+    $self->tuxts([]);
 
     # make a persistent object for this Texty thing
     # #hodu dump junk will not be saved
@@ -57,6 +58,7 @@ sub replace {
    
     if ($lines) { 
         $self->lines($lines);
+        $self->spatialise();
         $self->lines_to_tuxts();
         $self->tuxts_to_htmls();
     }
@@ -100,7 +102,7 @@ sub lines_to_tuxts {
 
     # bizzare
     if (!@{ $self->lines }) {
-        say "That thing happened";
+        say "\nThat thing happened to ".$self->id."\n\n\n\n";
         $self->tuxts([]);
     }
 
@@ -118,8 +120,9 @@ sub lines_to_tuxts {
     my @tuxts;
     for my $value (@{ $self->lines }) {
         $value =~ s/\n$//;
+        my $class = $self->hooks->{class} || "data";
         my $tuxt = {
-            class => "data",
+            class => $class,
             id => ($self->view->id.'-'.$self->id.'-'.$l++),
         };
 
@@ -135,7 +138,7 @@ sub lines_to_tuxts {
         }
 
         push @tuxts, {
-            class => "data ".$self->view->id,
+            class => "$class ".$self->view->id,
             id => ($self->id.'-'.$l++),
             value => $value,
         };
@@ -148,28 +151,40 @@ sub lines_to_tuxts {
 
 sub spatialise {
     my $self = shift;
-    my $here = shift;
     my $geo;
     if ($self->hooks->{spatialise}) {
-        say "Hello: ".ddump($self->hooks);
         $geo = $self->hooks->{spatialise}->();
     }
-    $geo ||= $here || { top => 30, left => 20 };
-    $geo->{top} ||= 0;
+    $geo->{top} ||= 20;
+    $geo->{left} ||= 30;
+    $geo->{space} ||= 20;
+    my $i = 0;
     for my $s (@{$self->tuxts}) {
-        $s->{top} ||= 0;
-        $s->{top} = $geo->{top};
-        if ($s->{right}) {
-            $s->{right} ||= 0;
-            $s->{right} += $geo->{right};
+        if ($geo->{horizontal}) {
+            $s->{top} = 0;
+            $s->{left} = $i * $geo->{horizontal};
+
         }
         else {
-            $s->{left} ||= 0;
-            $s->{left} += $geo->{left} if $geo->{left};
+            $s->{top} = $geo->{top};
+            if ($s->{right}) {
+                $s->{right} ||= 0;
+                $s->{right} += $geo->{right};
+            }
+            else {
+                $s->{left} ||= 0;
+                $s->{left} += $geo->{left} if $geo->{left};
+            }
+            $geo->{top} += $geo->{space};
         }
-        $geo->{top} += 20;
+        $i++;
     }
 }
+sub random_colour_background {
+    my ($rgb) = join", ", map int rand 255, 1 .. 3;
+    return "background: rgb($rgb);";
+}
+
 
 sub tuxts_to_htmls {
     my $self = shift;
@@ -219,17 +234,12 @@ sub event {
     my $tx = shift;
     my $event = shift;
 
-    $self->owner->event($tx, $event, $self);
+    $self->view->event($tx, $event, $self);
 }
 
 sub owner {
     my $self = shift;
-    my $owner = $self;
-    until (ref $owner eq "View") {
-        $owner = $owner->view;
-    }
-    $owner = $owner->owner;
-    return $owner;
+    return $self->view;
 }
 
 
